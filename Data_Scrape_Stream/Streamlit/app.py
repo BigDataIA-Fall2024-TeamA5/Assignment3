@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+from app_webpage import display_user_info  # Import the function to display user info
 
 # Set FastAPI backend URL
 backend_url = "http://127.0.0.1:8001"
@@ -68,21 +69,6 @@ elif st.session_state.page == "login":
 
     st.button("Go to Register", on_click=go_to_register)
 
-# User Info Page (protected by authentication)
+# User Info Page (loaded from app_webpage.py)
 elif st.session_state.page == "user_info":
-    st.title("User Info")
-    
-    if "access_token" in st.session_state:
-        token = st.session_state["access_token"]
-        headers = {"Authorization": f"Bearer {token}"}
-        response = requests.get(f"{backend_url}/auth/me", headers=headers)
-        
-        if response.status_code == 200:
-            user_info = response.json()
-            st.write("User Information:")
-            st.json(user_info)
-        else:
-            st.error("Failed to fetch user info.")
-    else:
-        st.warning("Please log in to view your user info.")
-        go_to_login()
+    display_user_info(backend_url)  # Call the function from app_webpage.py
