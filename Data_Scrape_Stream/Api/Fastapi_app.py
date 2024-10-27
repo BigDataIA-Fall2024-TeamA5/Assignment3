@@ -1,10 +1,34 @@
 # Import necessary modules from FastAPI, Pydantic, and authentication libraries
+import sys
+import os
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from pydantic import BaseModel
+import snowflake.connector  # Snowflake connector for database
+from dotenv import load_dotenv  # For loading environment variables
+
+# Load environment variables from .env
+load_dotenv()
+
+# Add the directory of this file (Fastapi_app.py) to the Python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+print("Python Path:", sys.path)
+
+# Function to connect to Snowflake
+def get_snowflake_connection():
+    conn = snowflake.connector.connect(
+        user=os.getenv("SNOWFLAKE_USER"), 
+        password=os.getenv("SNOWFLAKE_PASSWORD"), 
+        account=os.getenv("SNOWFLAKE_ACCOUNT"),
+        host=os.getenv("SNOWFLAKE_HOST"),
+        warehouse=os.getenv("SNOWFLAKE_WAREHOUSE"),
+        database=os.getenv("SNOWFLAKE_DATABASE"), 
+        schema=os.getenv("SNOWFLAKE_SCHEMA")
+    )
+    return conn
 
 # Set constants for JWT token generation
 SECRET_KEY = "your-secret-key"  # Replace with a strong, random key in production
@@ -99,3 +123,22 @@ async def read_users_me(token: str = Depends(oauth2_scheme)):
 async def root():
     return {"message": "Welcome to the API!"}
 
+
+
+@app.get("/test-snowflake")
+async def test_snowflake_connection():
+    try:
+        # Attempt to establish a connection
+        conn = get_snowflake_connection()
+        # Optionally, run a simple query to verify connection
+        cursor = conn.cursor()
+        cursor.execute("SELECT CURRENT_VERSION()")  # Sample query
+        result = cursor.fetchone()
+        
+        # Close the connection
+        cursor.close()
+        conn.close()
+        
+        return {"status": "Success", "Snowflake_version": result[0]}
+    except Exception as e:
+        return {"status": "Failed", "error": str(e)}
