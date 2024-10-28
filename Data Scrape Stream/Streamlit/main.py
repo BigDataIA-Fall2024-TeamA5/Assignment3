@@ -102,9 +102,14 @@ def show_pdf_details(pdf_name):
     st.write(f"### Details of {pdf_name}")
     st.write(f"*File Name*: {pdf_name}")
     
-    # Assuming you store some metadata in the S3 object or a database
-    # You can fetch additional metadata here if needed
-    st.write("Additional information about the PDF...")
+    # Fetch additional metadata from S3 (if needed)
+    s3_client = get_s3_client()
+    try:
+        metadata = s3_client.head_object(Bucket=S3_BUCKET_NAME, Key=pdf_name)
+        st.write(f"Size: {metadata['ContentLength']} bytes")
+        st.write(f"Last Modified: {metadata['LastModified']}")
+    except Exception as e:
+        st.error(f"Error fetching PDF metadata: {e}")
 
     # Link to the PDF file on S3 for downloading or viewing
     s3_url = f"https://{S3_BUCKET_NAME}.s3.{S3_REGION}.amazonaws.com/{pdf_name}"
@@ -129,7 +134,19 @@ def login_page():
         if st.button("Signup"):
             signup(username, email, password)
 
-# Fetch the list of PDFs from FastAPI
+# Signup function
+def signup(username, email, password):
+    response = requests.post(REGISTER_URL, json={
+        "username": username,
+        "email": email,
+        "password": password
+    })
+    if response.status_code == 200:
+        st.success("Account created successfully! Please login.")
+    else:
+        st.error(f"Signup failed: {response.json().get('detail', 'Unknown error occurred')}")
+
+# Login function
 def login(username, password):
     response = requests.post(LOGIN_URL, json={
         "username": username,
