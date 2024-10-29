@@ -10,6 +10,7 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException,
 import boto3
 from dotenv import load_dotenv
 import time
+import re
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -43,6 +44,12 @@ def create_webdriver():
     driver = webdriver.Chrome(service=service, options=chrome_options)
     logger.info("WebDriver created successfully!")
     return driver
+
+# Helper function to clean up image alt text for file naming
+def clean_image_filename(alt_text):
+    # Replace spaces and special characters with underscores or hyphens to make a valid filename
+    cleaned_filename = re.sub(r'[^a-zA-Z0-9]+', '-', alt_text.lower())
+    return f"{cleaned_filename}.jpg"
 
 # Helper function to find an element using multiple selectors (CSS or XPath as backup)
 def find_element_with_fallback(driver, css_selectors, xpath=None):
@@ -98,12 +105,14 @@ def scrape_and_upload_to_s3():
                     )
                     
                     if image:
-                        image_url = image.get_attribute("src")
-                        logger.info(f"Image URL ({index + 1}): {image_url}")
+                        # Extract image alt text and clean it to create a valid file name
+                        image_alt_text = image.get_attribute("alt")
+                        image_filename = clean_image_filename(image_alt_text)
+                        logger.info(f"Image filename created from alt text ({index + 1}): {image_filename}")
                         
                         # Download image
+                        image_url = image.get_attribute("src")
                         image_response = requests.get(image_url)
-                        image_filename = image_url.split('/')[-1].split('?')[0]  # Adjust to take only the base filename
                         with open(os.path.join('images', image_filename), 'wb') as f:
                             f.write(image_response.content)
                         logger.info(f"Image {index + 1} downloaded successfully.")
