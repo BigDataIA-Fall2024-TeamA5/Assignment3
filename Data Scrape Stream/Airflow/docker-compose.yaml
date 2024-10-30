@@ -1,0 +1,84 @@
+version: '3'
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-db-volume:/var/lib/postgresql/data
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  selenium:
+    image: seleniarm/standalone-chromium:latest
+    container_name: selenium_remote
+    ports:
+      - "4444:4444"
+    restart: always
+    shm_size: 2gb
+    
+  webserver:
+    image: apache/airflow:2.6.0
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: 7bqL7jviEFHVbaEU-Wc3M1gDfrOLy046lcfC4BekmkA=
+      AIRFLOW__WEBSERVER__SECRET_KEY: f72a995526f33cef8065ad87cb12660b
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./logs:/opt/airflow/logs
+    command: bash -c "pip install selenium boto3 python-dotenv requests && airflow webserver"
+
+  scheduler:
+    image: apache/airflow:2.6.0
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: 7bqL7jviEFHVbaEU-Wc3M1gDfrOLy046lcfC4BekmkA=
+    depends_on:
+      - webserver
+    volumes:
+      - ./dags:/opt/airflow/dags
+    command: bash -c "pip install selenium boto3 python-dotenv requests && airflow scheduler"
+
+  flower:
+    image: apache/airflow:2.6.0
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+    ports:
+      - "5555:5555"
+    depends_on:
+      - scheduler
+
+  worker:
+    image: apache/airflow:2.6.0
+    environment:
+      AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+      AIRFLOW__CELERY__BROKER_URL: redis://redis:6379/0
+      AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY: 7bqL7jviEFHVbaEU-Wc3M1gDfrOLy046lcfC4BekmkA=
+    depends_on:
+      - scheduler
+    command: bash -c "pip install selenium boto3 python-dotenv requests && airflow celery worker"
+
+volumes:
+  postgres-db-volume:
+    external: false
