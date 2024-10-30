@@ -61,6 +61,18 @@ def fetch_pdf_data_from_snowflake():
 
     return result  # Returns a list of tuples (title, brief_summary, image_link, pdf_link)
 
+# Function to display PDF details
+def display_pdf_details(pdf_data):
+    pdf_name, brief_summary, image_link, pdf_link = pdf_data
+    st.title(f"Details of {pdf_name}")
+    st.image(image_link, width=400)
+    st.write(f"**Summary**: {brief_summary}")
+    st.markdown(f"[Open PDF]({pdf_link})", unsafe_allow_html=True)
+
+    if st.button("Back to Main"):
+        st.session_state['selected_pdf'] = None
+        st.rerun()
+
 # Main Application
 def main_app():
     # Custom CSS for orange buttons
@@ -91,24 +103,27 @@ def main_app():
 
     st.markdown("<h1 class='centered-title'>PDF Text Extraction Application</h1>", unsafe_allow_html=True)
 
-    # View mode selector
-    view_mode = st.radio("Select view mode", ["List View", "Grid View"], index=0 if st.session_state['view_mode'] == 'list' else 1)
-
-    # Update session state based on view mode
-    if view_mode == "List View":
-        st.session_state['view_mode'] = 'list'
+    if st.session_state['selected_pdf']:
+        display_pdf_details(st.session_state['selected_pdf'])
     else:
-        st.session_state['view_mode'] = 'grid'
+        # View mode selector
+        view_mode = st.radio("Select view mode", ["List View", "Grid View"], index=0 if st.session_state['view_mode'] == 'list' else 1)
 
-    # Fetch PDF data from Snowflake if not already fetched
-    if not st.session_state['pdf_data']:
-        st.session_state['pdf_data'] = fetch_pdf_data_from_snowflake()
+        # Update session state based on view mode
+        if view_mode == "List View":
+            st.session_state['view_mode'] = 'list'
+        else:
+            st.session_state['view_mode'] = 'grid'
 
-    # Display PDFs based on selected view mode
-    if st.session_state['view_mode'] == 'list':
-        display_pdfs_list_view()
-    else:
-        display_pdfs_grid_view()
+        # Fetch PDF data from Snowflake if not already fetched
+        if not st.session_state['pdf_data']:
+            st.session_state['pdf_data'] = fetch_pdf_data_from_snowflake()
+
+        # Display PDFs based on selected view mode
+        if st.session_state['view_mode'] == 'list':
+            display_pdfs_list_view()
+        else:
+            display_pdfs_grid_view()
 
 # Function to display PDFs in list view
 def display_pdfs_list_view():
@@ -117,7 +132,7 @@ def display_pdfs_list_view():
         pdf_name, brief_summary, image_link, pdf_link = pdf_data
         if st.button(f"{pdf_name}", key=f"list_{i}"):
             st.session_state['selected_pdf'] = pdf_data
-            show_pdf_details(pdf_name, pdf_link, image_link, brief_summary)
+            st.rerun()  # This will reload the app and navigate to the next page
 
 # Function to display PDFs in grid view with hover effect and larger images
 def display_pdfs_grid_view():
@@ -176,23 +191,9 @@ def display_pdfs_grid_view():
                 </div>
             """, unsafe_allow_html=True)
 
-            if st.button(f"{pdf_name}", key=f"grid_{i}"):
+            if st.button(f"Open {pdf_name}", key=f"grid_{i}"):
                 st.session_state['selected_pdf'] = pdf_data
-                show_pdf_details(pdf_name, pdf_link, image_link, brief_summary)
-
-# Function to display PDF details
-def show_pdf_details(pdf_name, pdf_link, image_link, brief_summary):
-    st.write(f"### Details of {pdf_name}")
-    
-    # Display the PDF details
-    if image_link:
-        st.image(image_link, width=350)  # Display the image in a larger size
-
-    # Display brief summary
-    st.write(f"**Summary**: {brief_summary}")
-
-    # Link to the PDF file for viewing or downloading
-    st.markdown(f"[Open PDF]({pdf_link})", unsafe_allow_html=True)
+                st.rerun()  # This will reload the app and navigate to the next page
 
 # Logout function
 def logout():
