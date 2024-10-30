@@ -1,70 +1,97 @@
 import streamlit as st
 import requests
-import boto3
+import snowflake.connector
 from dotenv import load_dotenv
 import os
 
 # Load environment variables
 load_dotenv()
 
-# S3 Credentials from .env
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
-S3_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID")
-S3_SECRET_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-S3_REGION = os.getenv("S3_REGION")
-
 # FastAPI endpoint URLs for user login and PDF list retrieval
 FASTAPI_URL = os.getenv("FASTAPI_URL", "http://127.0.0.1:8000")
 REGISTER_URL = f"{FASTAPI_URL}/auth/register"
 LOGIN_URL = f"{FASTAPI_URL}/auth/login"
 
-# Set up Streamlit page configuration
-st.set_page_config(page_title="PDF Text Extraction Application", layout="centered")
+# Set up Streamlit page configuration with a wide layout
+st.set_page_config(page_title="PDF Text Extraction Application", layout="wide")
 
 # Initialize session state variables
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'access_token' not in st.session_state:
     st.session_state['access_token'] = None
-if 'pdf_files' not in st.session_state:
-    st.session_state['pdf_files'] = []
+if 'pdf_data' not in st.session_state:
+    st.session_state['pdf_data'] = []
 if 'selected_pdf' not in st.session_state:
     st.session_state['selected_pdf'] = None
 if 'view_mode' not in st.session_state:
     st.session_state['view_mode'] = 'list'  # default view is list
 
-# S3 client setup
-def get_s3_client():
-    return boto3.client(
-        's3',
-        aws_access_key_id=S3_ACCESS_KEY,
-        aws_secret_access_key=S3_SECRET_KEY,
-        region_name=S3_REGION
-    )
-
-# Function to fetch PDFs from S3
-def list_pdfs_from_s3():
+# Snowflake connection setup
+def create_snowflake_connection():
     try:
-        s3_client = get_s3_client()
-        response = s3_client.list_objects_v2(Bucket=S3_BUCKET_NAME)
-        if 'Contents' in response:
-            pdf_files = [file['Key'] for file in response['Contents'] if file['Key'].endswith('.pdf')]
-            return pdf_files
-        else:
-            return []
+        conn = snowflake.connector.connect(
+            user=os.getenv("SNOWFLAKE_USER"),
+            password=os.getenv("SNOWFLAKE_PASSWORD"),
+            account=os.getenv("SNOWFLAKE_ACCOUNT"),
+            warehouse=os.getenv("SNOWFLAKE_WAREHOUSE"),
+            database=os.getenv("SNOWFLAKE_DATABASE"),
+            schema=os.getenv("SNOWFLAKE_SCHEMA")
+        )
+        return conn
     except Exception as e:
-        st.error(f"Failed to fetch PDFs from S3: {e}")
+        st.error(f"Error connecting to Snowflake: {e}")
+        return None
+
+# Function to fetch PDFs and their corresponding image links from Snowflake
+def fetch_pdf_data_from_snowflake():
+    conn = create_snowflake_connection()
+    if not conn:
         return []
+    
+    cursor = conn.cursor()
+
+    # Fetch title, image link, and PDF link from the Snowflake PUBLICATIONS table
+    query = "SELECT title, brief_summary, image_link, pdf_link FROM PUBLIC.PUBLICATIONS"
+    cursor.execute(query)
+    result = cursor.fetchall()
+    
+    cursor.close()
+    conn.close()
+
+    return result  # Returns a list of tuples (title, brief_summary, image_link, pdf_link)
 
 # Main Application
 def main_app():
-    st.title("PDF Text Extraction Application")
+    # Custom CSS for orange buttons
+    st.markdown("""
+        <style>
+        .stButton button {
+            background-color: orange;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .centered-title {
+            font-size: 40px;
+            font-weight: bold;
+            text-align: center;
+            border-bottom: 2px solid black;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-    # Fetch PDF files from S3 bucket
-    if not st.session_state['pdf_files']:
-        st.session_state['pdf_files'] = list_pdfs_from_s3()
+    # Logout button on the upper-left corner
+    st.sidebar.button("Logout", on_click=logout, help="Logout", key="logout_button")
 
-    # Let the user choose between grid view and list view
+    st.markdown("<h1 class='centered-title'>PDF Text Extraction Application</h1>", unsafe_allow_html=True)
+
+    # View mode selector
     view_mode = st.radio("Select view mode", ["List View", "Grid View"], index=0 if st.session_state['view_mode'] == 'list' else 1)
 
     # Update session state based on view mode
@@ -72,6 +99,10 @@ def main_app():
         st.session_state['view_mode'] = 'list'
     else:
         st.session_state['view_mode'] = 'grid'
+
+    # Fetch PDF data from Snowflake if not already fetched
+    if not st.session_state['pdf_data']:
+        st.session_state['pdf_data'] = fetch_pdf_data_from_snowflake()
 
     # Display PDFs based on selected view mode
     if st.session_state['view_mode'] == 'list':
@@ -82,41 +113,95 @@ def main_app():
 # Function to display PDFs in list view
 def display_pdfs_list_view():
     st.subheader("PDF Files (List View)")
-    for pdf in st.session_state['pdf_files']:
-        if st.button(f"Open {pdf}"):
-            st.session_state['selected_pdf'] = pdf
-            show_pdf_details(pdf)
+    for i, pdf_data in enumerate(st.session_state['pdf_data']):
+        pdf_name, brief_summary, image_link, pdf_link = pdf_data
+        if st.button(f"{pdf_name}", key=f"list_{i}"):
+            st.session_state['selected_pdf'] = pdf_data
+            show_pdf_details(pdf_name, pdf_link, image_link, brief_summary)
 
-# Function to display PDFs in grid view
+# Function to display PDFs in grid view with hover effect and larger images
 def display_pdfs_grid_view():
     st.subheader("PDF Files (Grid View)")
-    cols = st.columns(3)  # Adjust the number of columns as needed
-    for i, pdf in enumerate(st.session_state['pdf_files']):
+
+    # Custom CSS for hover effect and padding between columns
+    st.markdown("""
+        <style>
+        .pdf-container {
+            position: relative;
+            width: 300px;
+            height: 400px;
+            margin: 20px;
+        }
+        .pdf-image {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 10px;
+            transition: transform 0.3s ease;
+        }
+        .pdf-container:hover .pdf-image {
+            transform: scale(1.05);
+        }
+        .pdf-details {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-bottom-left-radius: 10px;
+            border-bottom-right-radius: 10px;
+            display: none;
+        }
+        .pdf-container:hover .pdf-details {
+            display: block;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # Adjusted columns to fit well with spacing
+    cols = st.columns([1, 1, 1], gap="large")  # Adjusted column width and gap between columns
+    for i, pdf_data in enumerate(st.session_state['pdf_data']):
+        pdf_name, brief_summary, image_link, pdf_link = pdf_data
         with cols[i % 3]:
-            if st.button(f"Open {pdf}"):
-                st.session_state['selected_pdf'] = pdf
-                show_pdf_details(pdf)
+            # Display the PDF image with hover effect
+            st.markdown(f"""
+                <div class="pdf-container">
+                    <img class="pdf-image" src="{image_link}" alt="{pdf_name}">
+                    <div class="pdf-details">
+                        <h4>{pdf_name}</h4>
+                        <p>{brief_summary}</p>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            if st.button(f"{pdf_name}", key=f"grid_{i}"):
+                st.session_state['selected_pdf'] = pdf_data
+                show_pdf_details(pdf_name, pdf_link, image_link, brief_summary)
 
 # Function to display PDF details
-def show_pdf_details(pdf_name):
+def show_pdf_details(pdf_name, pdf_link, image_link, brief_summary):
     st.write(f"### Details of {pdf_name}")
-    st.write(f"*File Name*: {pdf_name}")
     
-    # Fetch additional metadata from S3 (if needed)
-    s3_client = get_s3_client()
-    try:
-        metadata = s3_client.head_object(Bucket=S3_BUCKET_NAME, Key=pdf_name)
-        st.write(f"Size: {metadata['ContentLength']} bytes")
-        st.write(f"Last Modified: {metadata['LastModified']}")
-    except Exception as e:
-        st.error(f"Error fetching PDF metadata: {e}")
+    # Display the PDF details
+    if image_link:
+        st.image(image_link, width=350)  # Display the image in a larger size
 
-    # Link to the PDF file on S3 for downloading or viewing
-    s3_url = f"https://{S3_BUCKET_NAME}.s3.{S3_REGION}.amazonaws.com/{pdf_name}"
-    st.markdown(f"[Open PDF]({s3_url})", unsafe_allow_html=True)
+    # Display brief summary
+    st.write(f"**Summary**: {brief_summary}")
+
+    # Link to the PDF file for viewing or downloading
+    st.markdown(f"[Open PDF]({pdf_link})", unsafe_allow_html=True)
+
+# Logout function
+def logout():
+    st.session_state['logged_in'] = False
+    st.session_state['access_token'] = None
 
 # Login Page
 def login_page():
+    st.header("Login / Signup")  # Add a header for login/signup
     option = st.selectbox("Select Login or Signup", ("Login", "Signup"))
 
     if option == "Login":
