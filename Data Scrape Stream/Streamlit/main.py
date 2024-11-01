@@ -5,7 +5,10 @@ from dotenv import load_dotenv
 import os
 from Api.rag_model import main_rag_process
 from Api.summarizer_model import show_process_pdf_page
+from Api.report_generator import report
 import sys
+
+
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
@@ -82,8 +85,9 @@ def display_pdf_details(pdf_data):
         if st.button("Get Answer"):
             answer = main_rag_process(pdf_link, user_query)
             st.write("Answer:", answer)
+        elif st.button("Generate Report"):
+            report(pdf_link,user_query)
         else:
-            st.write("No PDF selected. Please select a PDF.")
             if st.button("Back to Main"):
                 st.session_state['selected_pdf'] = None
                 st.rerun()
