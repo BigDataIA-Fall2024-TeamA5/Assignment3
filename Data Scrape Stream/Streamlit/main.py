@@ -3,7 +3,12 @@ import requests
 import snowflake.connector
 from dotenv import load_dotenv
 import os
-
+from Api.rag_model import main_rag_process
+from Api.summarizer_model import show_process_pdf_page
+import sys
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 # Load environment variables
 load_dotenv()
 
@@ -68,10 +73,26 @@ def display_pdf_details(pdf_data):
     st.image(image_link, width=400)
     st.write(f"**Summary**: {brief_summary}")
     st.markdown(f"[Open PDF]({pdf_link})", unsafe_allow_html=True)
+    if 'selected_pdf' in st.session_state:
+        pdf_link = st.session_state['selected_pdf'][3]  # Assumes PDF link is the fourth element
+        menu_options = ["Process and Summarize PDF"]
 
-    if st.button("Back to Main"):
-        st.session_state['selected_pdf'] = None
-        st.rerun()
+        with st.sidebar:
+            choice = st.selectbox("Menu", menu_options)
+
+        if choice == "Process and Summarize PDF":
+            show_process_pdf_page(pdf_link)
+            
+        user_query = st.text_input("Enter your question:")
+        
+        if st.button("Get Answer"):
+            answer = main_rag_process(pdf_link, user_query)
+            st.write("Answer:", answer)
+        else:
+            st.write("No PDF selected. Please select a PDF.")
+            if st.button("Back to Main"):
+                st.session_state['selected_pdf'] = None
+                st.rerun()
 
 # Main Application
 def main_app():
