@@ -75,13 +75,7 @@ def display_pdf_details(pdf_data):
     st.markdown(f"[Open PDF]({pdf_link})", unsafe_allow_html=True)
     if 'selected_pdf' in st.session_state:
         pdf_link = st.session_state['selected_pdf'][3]  # Assumes PDF link is the fourth element
-        menu_options = ["Process and Summarize PDF"]
-
-        with st.sidebar:
-            choice = st.selectbox("Menu", menu_options)
-
-        if choice == "Process and Summarize PDF":
-            show_process_pdf_page(pdf_link)
+        show_process_pdf_page(pdf_link)
             
         user_query = st.text_input("Enter your question:")
         

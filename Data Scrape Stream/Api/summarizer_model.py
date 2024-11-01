@@ -46,8 +46,6 @@ def load_pdf_from_url(pdf_link: str):
 # Streamlit UI
 def show_process_pdf_page(pdf_link):
     MAX_CONTEXT_LENGTH = 4000  # Define MAX_CONTEXT_LENGTH at the start of the function
-
-    st.subheader("Process PDF Document from URL")
     #pdf_link = st.text_input("Enter the PDF URL to Process", "")
     
     if pdf_link and st.button("Process PDF"):

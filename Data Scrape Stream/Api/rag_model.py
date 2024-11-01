@@ -13,6 +13,7 @@ from pinecone import Pinecone, ServerlessSpec
 from .document_processors import parse_all_tables, parse_all_images, load_multimodal_data, load_data_from_directory
 from .helper_utils import describe_image, is_graph, process_graph, extract_text_around_item, process_text_blocks, save_uploaded_file
 from huggingface_hub import hf_hub_download
+
 # Load environment variables
 load_dotenv()
 
@@ -32,35 +33,25 @@ pinecone_client = Pinecone(api_key=PINECONE_API_KEY)
 if INDEX_NAME not in [index.name for index in pinecone_client.list_indexes()]:
     pinecone_client.create_index(
         name=INDEX_NAME,
-        dimension=1536,  # Dimension varies by embedding model
+        dimension=384,  # Dimension varies by embedding model
         metric='cosine',
         spec=ServerlessSpec(cloud='aws', region=PINECONE_ENVIRONMENT)
     )
 
 # Initialize models
 sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
-nvidia_model = None  # Placeholder for NVIDIA initialization if required
 
 # User choice function for embedding models
 def initialize_embedding_model(choice):
     if choice == 'sentence-transformers':
         return sentence_model
-    elif choice == 'nvidia':
-        return nvidia_model  # Replace with actual NVIDIA initialization
     else:
-        raise ValueError("Invalid embedding model choice. Choose 'sentence-transformers' or 'nvidia'.")
+        raise ValueError("Invalid embedding model choice. Choose 'sentence-transformers'")
 
 # Function to create embeddings based on user-selected model
 def create_embeddings(chunks, model_choice):
     model = initialize_embedding_model(model_choice)
-    embeddings = []
-    
-    for chunk in chunks:
-        if model_choice == 'sentence-transformers':
-            embeddings.append(model.encode(chunk).tolist())
-        elif model_choice == 'nvidia':
-            # Use NVIDIA embedding extraction here if available
-            pass
+    embeddings = [model.encode(chunk).tolist() for chunk in chunks]
     return embeddings
 
 # Utility functions
@@ -71,16 +62,13 @@ def get_document_index_name(document_path):
         document_hash = hashlib.md5(file.read()).hexdigest()
     # Create a valid index name
     index_name = f"index_{document_hash}"
-    # Sanitize: lowercase and replace invalid characters with hyphens
-    index_name = re.sub(r'[^a-z0-9-]', '-', index_name.lower())
+    index_name = re.sub(r'[^a-z0-9-]', '-', index_name.lower())  # Sanitize name for Pinecone
     return index_name
 
-pinecone_client = Pinecone(api_key=PINECONE_API_KEY)
-
 # Modify get_or_create_pinecone_index function to include spec
-index_registry = {}  # Initialize the registry as an empty dictionary
+index_registry = {}
 
-def get_or_create_pinecone_index(document_path, dimension=1536):
+def get_or_create_pinecone_index(document_path, dimension=384):
     """Fetch or create a Pinecone index for the document."""
     index_name = get_document_index_name(document_path)
     
@@ -100,7 +88,6 @@ def get_or_create_pinecone_index(document_path, dimension=1536):
         else:
             print(f"Index already exists on Pinecone: {index_name}")
         
-        # Register the index in our registry
         index_registry[document_path] = index_name
 
     return pinecone_client.Index(index_name)
@@ -117,18 +104,20 @@ def download_pdf(pdf_url):
         raise ValueError("Failed to download PDF. Check the URL.")
 
 def extract_text_from_pdf(pdf_path):
-    """Extract text from each page of a PDF file."""
+    """Extract and clean text from each page of a PDF file."""
     text = ""
     with fitz.open(pdf_path) as pdf:
         for page_num in range(pdf.page_count):
-            text += pdf[page_num].get_text()
-    return text
+            page_text = pdf[page_num].get_text()
+            cleaned_text = clean_text(page_text)  # Clean each page's text
+            text += cleaned_text + " "  # Add space between pages for readability
+    return text.strip()
 
 def chunk_data(text, chunk_size=600, chunk_overlap=50):
-    """Split text into chunks with specified overlap."""
+    """Split cleaned text into chunks with specified overlap."""
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     chunks = text_splitter.split_text(text)
-    return chunks
+    return [clean_text(chunk) for chunk in chunks]  
 
 def store_embeddings_in_pinecone(chunks, chunk_embeddings, pinecone_index):
     """Store embeddings in Pinecone vector index with metadata."""
@@ -140,15 +129,37 @@ def store_embeddings_in_pinecone(chunks, chunk_embeddings, pinecone_index):
         response = pinecone_index.upsert(vectors=data)
         print("Upsert response:", response)
 
+def clean_text(text):
+    # Remove non-ASCII characters and replace multiple spaces or newlines with a single space
+    text = re.sub(r'[^\x00-\x7F]+', ' ', text)  # Remove non-ASCII characters
+    text = re.sub(r'\s+', ' ', text)  # Replace multiple whitespace with a single space
+    return text.strip()
+
+# Improved retrieve_answer function to return a coherent response
 def retrieve_answer(query, pinecone_index, model_choice):
     """Retrieve answer based on query embedding."""
     model = initialize_embedding_model(model_choice)
     query_embedding = model.encode(query).tolist()
     
+    # Query Pinecone for matches
     results = pinecone_index.query(vector=query_embedding, top_k=5, include_metadata=True)
-    for match in results.get("matches", []):
-        print("Match metadata:", match.get("metadata", "No metadata found"))
 
+    # Check and collect the results
+    if results and "matches" in results:
+        answer_text = ""
+        for match in results["matches"]:
+            match_text = match.get("metadata", {}).get("text", "").strip()
+            
+            # Check if match_text exists and is not empty
+            if match_text:
+                answer_text += match_text + "\n\n"
+        
+        # Return aggregated answer or fallback message
+        return answer_text.strip() if answer_text else "No relevant answer found."
+    else:
+        return "No matches found in Pinecone index."
+
+# Main RAG process function
 def main_rag_process(pdf_link, query, model_choice='sentence-transformers'):
     """End-to-end Retrieval-Augmented Generation (RAG) process for PDF."""
     pdf_path = download_pdf(pdf_link)
@@ -159,5 +170,6 @@ def main_rag_process(pdf_link, query, model_choice='sentence-transformers'):
     pinecone_index = get_or_create_pinecone_index(pdf_path)
     store_embeddings_in_pinecone(chunks, chunk_embeddings, pinecone_index)
 
-    retrieve_answer(query, pinecone_index, model_choice)
+    answer = retrieve_answer(query, pinecone_index, model_choice)
     os.remove(pdf_path)
+    return answer
