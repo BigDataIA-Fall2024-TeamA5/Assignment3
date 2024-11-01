@@ -5,10 +5,12 @@ from fastapi.middleware.cors import CORSMiddleware
 import boto3
 import os
 from dotenv import load_dotenv
+from pdf_routes import pdf_router
 app = FastAPI()
 
 # Include the `jwtauth.py` router
 app.include_router(router, prefix="/auth")
+app.include_router(pdf_router, prefix="/files")
 
 # Define the OAuth2 scheme
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")

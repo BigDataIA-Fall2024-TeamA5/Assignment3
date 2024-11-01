@@ -24,6 +24,10 @@ boto3 = "^1.35.38"
 openai = "0.28.0"
 streamlit = "^1.39.0"
 snowflake-connector-python = "^3.12.3"
+requests = "^2.32.3"
+transformers = "^4.46.1"
+torch = "^2.5.1"
+pypdf2 = "^3.0.1"
 
 
 

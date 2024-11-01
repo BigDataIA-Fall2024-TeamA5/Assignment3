@@ -6,14 +6,14 @@ from typing import Dict
 from pydantic import BaseModel
 import snowflake.connector
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-# Create FastAPI app
-app = FastAPI()
+# Create router instead of FastAPI app
+app = FastAPI() 
 router = APIRouter()
 
 # Enable CORS
@@ -38,14 +38,6 @@ security = HTTPBearer()
 # Snowflake connection function
 def create_snowflake_connection():
     try:
-        # Debugging print to verify connection details
-        print(f"Connecting to Snowflake with the following details:")
-        print(f"User: {os.getenv('SNOWFLAKE_USER')}")
-        print(f"Account: {os.getenv('SNOWFLAKE_ACCOUNT')}")
-        print(f"Database: {os.getenv('SNOWFLAKE_DATABASE')}")
-        print(f"Schema: {os.getenv('SNOWFLAKE_SCHEMA')}")
-        print(f"Warehouse: {os.getenv('SNOWFLAKE_WAREHOUSE')}")
-
         connection = snowflake.connector.connect(
             user=os.getenv("SNOWFLAKE_USER"),
             password=os.getenv("SNOWFLAKE_PASSWORD"),
@@ -54,7 +46,6 @@ def create_snowflake_connection():
             database=os.getenv("SNOWFLAKE_DATABASE"),
             schema=os.getenv("SNOWFLAKE_SCHEMA")
         )
-        print("Snowflake connection established successfully!")
         return connection
     except Exception as e:
         print(f"Error connecting to Snowflake: {e}")
@@ -80,7 +71,7 @@ def decode_jwt_token(token: str):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-# Fetch user from Snowflake database (using DictCursor)
+# Fetch user from Snowflake database
 def get_user_from_db(username: str):
     connection = create_snowflake_connection()
     if connection is None:
@@ -89,13 +80,10 @@ def get_user_from_db(username: str):
     try:
         cursor = connection.cursor(snowflake.connector.DictCursor)  # Use DictCursor to get a dictionary result
         query = "SELECT * FROM users WHERE username = %s"
-        print(f"Running query: {query} with username: {username}")  # Debugging print
         cursor.execute(query, (username,))
-        user = cursor.fetchone()  # This will now return a dictionary
-        print(f"User fetched: {user}")  # Debugging print
+        user = cursor.fetchone()
         return user
     except Exception as e:
-        print(f"Error fetching user from Snowflake: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error fetching user from database")
     finally:
         cursor.close()
@@ -148,7 +136,6 @@ def register(user: UserRegister):
         return {"message": "User registered successfully"}
     
     except Exception as e:
-        print(f"Error registering user: {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to register user")
     
     finally:
