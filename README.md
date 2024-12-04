@@ -9,7 +9,7 @@ This project aims to develop a structured database and text extraction system de
 
 ## Architectural Diagram
 
-![Architecture Diagram](./architecture_diagram_output.png)
+![Architecture Diagram](architecture.png)
 
 The architecture illustrates the data flow and interactions among the key components:
 - **NVIDIA Llama and Langchain**: For summary generation and Q&A response generation.
