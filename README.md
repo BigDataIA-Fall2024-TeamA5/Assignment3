@@ -3,7 +3,7 @@
 
 ## Project Overview
 
-This project aims to develop a structured database and text extraction system designed to organize and interact with extensive research resources across various domains. By automating data ingestion, processing, and summarization, the system enables users to efficiently explore, query, and extract insights from a wide range of documents. The project is divided into several key components, including data ingestion, automated processing, a client-facing application, research note indexing, and search funct...
+This project aims to develop a structured database and text extraction system designed to organize and interact with extensive research resources across various domains. By automating data ingestion, processing, and summarization, the system enables users to efficiently explore, query, and extract insights from a wide range of documents. The project is divided into several key components, including data ingestion, automated processing, a client-facing application, research note indexing, and search function
 
 ---
 
